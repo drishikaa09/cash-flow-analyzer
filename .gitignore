@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*.csv
+.env
+.aws/
+.vscode/
+.DS_Store

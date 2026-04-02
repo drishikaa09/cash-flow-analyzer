@@ -1,0 +1,17 @@
+# Tell Docker to ignore these when building the image.
+# Same idea as .gitignore — keeps your image clean and small.
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.venv
+venv/
+*.csv          # don't bake generated data into the image
+*.log
+.DS_Store
+.git
+.gitignore
+README.md
