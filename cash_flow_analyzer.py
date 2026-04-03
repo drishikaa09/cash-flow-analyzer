@@ -1,3 +1,6 @@
+import os
+import boto3
+from dotenv import load_dotenv
 import csv
 import random
 from datetime import datetime, timedelta
@@ -116,6 +119,19 @@ def print_report(stats: dict) -> None:
 # ──────────────────────────────────────────────
 # MAIN
 # ──────────────────────────────────────────────
+def upload_to_s3(filename: str) -> None:
+    load_dotenv()
+    bucket = os.getenv("AWS_BUCKET_NAME")
+    region = os.getenv("AWS_REGION")
+    client = boto3.client(
+        "s3",
+        region_name=region,
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    )
+    client.upload_file(filename, bucket, filename)
+    print(f"  ✔ Uploaded {filename} → s3://{bucket}/{filename}")
+
 if __name__ == "__main__":
     print("\n⚙  Generating transactions...")
     txns = generate_transactions(NUM_TRANSACTIONS)
@@ -125,5 +141,8 @@ if __name__ == "__main__":
 
     print("⚙  Saving CSV...")
     save_to_csv(txns)
+
+    print("⚙  Uploading to S3...")
+    upload_to_s3("transactions.csv")
 
     print_report(stats)
