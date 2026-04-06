@@ -11,7 +11,7 @@ fake = Faker()
 # ──────────────────────────────────────────────
 # CONFIGURATION
 # ──────────────────────────────────────────────
-NUM_TRANSACTIONS = 100
+NUM_TRANSACTIONS = 150
 START_DATE = datetime(2024, 1, 1)
 END_DATE = datetime(2024, 12, 31)
 
