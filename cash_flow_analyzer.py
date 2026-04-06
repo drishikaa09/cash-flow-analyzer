@@ -1,126 +1,56 @@
+import csv
 import os
 import boto3
+import requests
+from datetime import datetime
 from dotenv import load_dotenv
-import csv
-import random
-from datetime import datetime, timedelta
-from faker import Faker
 
-fake = Faker()
+load_dotenv()
 
-# ──────────────────────────────────────────────
-# CONFIGURATION
-# ──────────────────────────────────────────────
-NUM_TRANSACTIONS = 150
-START_DATE = datetime(2024, 1, 1)
-END_DATE = datetime(2024, 12, 31)
+# ── Configuration ─────────────────────────────
+API_KEY = os.getenv("EXCHANGE_API_KEY")
+BASE_CURRENCY = "USD"
+TRACKED_CURRENCIES = ["EUR", "GBP", "INR", "JPY", "AUD", "CAD", "CHF", "SGD"]
 
-CATEGORIES = {
-    "income": ["Salary", "Freelance", "Investment", "Bonus", "Refund"],
-    "expense": ["Rent", "Groceries", "Utilities", "Transport",
-                "Entertainment", "Healthcare", "Dining", "Shopping"],
-}
+# ── Step 1: Fetch live exchange rates ─────────
+def fetch_rates(base: str) -> dict:
+    url = f"https://v6.exchangerate-api.com/v6/{API_KEY}/latest/{base}"
+    response = requests.get(url)
+    response.raise_for_status()
+    data = response.json()
+    print(f"  ✔ Fetched rates for {base} — last updated: {data['time_last_update_utc']}")
+    return data
 
-# ──────────────────────────────────────────────
-# STEP 1 — Generate fake transactions
-# ──────────────────────────────────────────────
-def generate_transactions(n: int) -> list[dict]:
-    transactions = []
-    for _ in range(n):
-        txn_type = random.choices(["income", "expense"], weights=[30, 70])[0]
-        category = random.choice(CATEGORIES[txn_type])
+# ── Step 2: Analyze the rates ─────────────────
+def analyze(data: dict) -> list[dict]:
+    rates = data["conversion_rates"]
+    base = data["base_code"]
+    timestamp = data["time_last_update_utc"]
 
-        if txn_type == "income":
-            amount = round(random.uniform(500, 8000), 2)
-        else:
-            amount = round(random.uniform(10, 1500), 2)
+    results = []
+    for currency in TRACKED_CURRENCIES:
+        rate = rates.get(currency)
+        if rate:
+            results.append({
+                "timestamp": timestamp,
+                "base_currency": base,
+                "target_currency": currency,
+                "exchange_rate": rate,
+                "1000_usd_equivalent": round(1000 * rate, 2),
+            })
+    return results
 
-        date = fake.date_time_between(start_date=START_DATE, end_date=END_DATE)
-
-        transactions.append({
-            "date": date.strftime("%Y-%m-%d"),
-            "description": fake.company() if txn_type == "income" else fake.bs().title(),
-            "category": category,
-            "type": txn_type,
-            "amount": amount,
-        })
-
-    # Sort by date ascending
-    transactions.sort(key=lambda x: x["date"])
-    return transactions
-
-
-# ──────────────────────────────────────────────
-# STEP 2 — Analyze the transactions
-# ──────────────────────────────────────────────
-def analyze(transactions: list[dict]) -> dict:
-    total_income = sum(t["amount"] for t in transactions if t["type"] == "income")
-    total_expense = sum(t["amount"] for t in transactions if t["type"] == "expense")
-    net_cash_flow = total_income - total_expense
-
-    # Spending breakdown by category
-    category_totals: dict[str, float] = {}
-    for t in transactions:
-        category_totals[t["category"]] = round(
-            category_totals.get(t["category"], 0) + t["amount"], 2
-        )
-
-    top_expense_category = max(
-        (k for k in category_totals if k in CATEGORIES["expense"]),
-        key=lambda k: category_totals[k],
-    )
-
-    return {
-        "total_income": round(total_income, 2),
-        "total_expense": round(total_expense, 2),
-        "net_cash_flow": round(net_cash_flow, 2),
-        "category_totals": category_totals,
-        "top_expense_category": top_expense_category,
-        "num_transactions": len(transactions),
-    }
-
-
-# ──────────────────────────────────────────────
-# STEP 3 — Save to CSV
-# ──────────────────────────────────────────────
-def save_to_csv(transactions: list[dict], filename: str = "transactions.csv") -> None:
-    fieldnames = ["date", "description", "category", "type", "amount"]
+# ── Step 3: Save to CSV ───────────────────────
+def save_to_csv(results: list[dict], filename: str = "exchange_rates.csv") -> None:
+    fieldnames = ["timestamp", "base_currency", "target_currency", "exchange_rate", "1000_usd_equivalent"]
     with open(filename, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
-        writer.writerows(transactions)
-    print(f"  ✔ Saved {len(transactions)} transactions → {filename}")
+        writer.writerows(results)
+    print(f"  ✔ Saved {len(results)} rates → {filename}")
 
-
-# ──────────────────────────────────────────────
-# STEP 4 — Print summary report
-# ──────────────────────────────────────────────
-def print_report(stats: dict) -> None:
-    bar = "─" * 42
-    print(f"\n{'':>4}💰  CASH FLOW SUMMARY REPORT")
-    print(f"  {bar}")
-    print(f"  Transactions analysed : {stats['num_transactions']}")
-    print(f"  Total Income          : ${stats['total_income']:>10,.2f}")
-    print(f"  Total Expenses        : ${stats['total_expense']:>10,.2f}")
-    print(f"  {bar}")
-    net = stats['net_cash_flow']
-    sign = "+" if net >= 0 else ""
-    print(f"  Net Cash Flow         : {sign}${net:>10,.2f}  {'✅' if net >= 0 else '⚠️ '}")
-    print(f"  {bar}")
-    print(f"  Top Expense Category  : {stats['top_expense_category']}")
-    print(f"\n  {'Category':<20} {'Total':>10}")
-    print(f"  {'─'*20} {'─'*10}")
-    for cat, total in sorted(stats["category_totals"].items(),
-                              key=lambda x: -x[1]):
-        print(f"  {cat:<20} ${total:>9,.2f}")
-    print()
-
-
-# ──────────────────────────────────────────────
-# MAIN
-# ──────────────────────────────────────────────
+# ── Step 4: Upload to S3 ──────────────────────
 def upload_to_s3(filename: str) -> None:
-    load_dotenv()
     bucket = os.getenv("AWS_BUCKET_NAME")
     region = os.getenv("AWS_REGION")
     client = boto3.client(
@@ -132,17 +62,29 @@ def upload_to_s3(filename: str) -> None:
     client.upload_file(filename, bucket, filename)
     print(f"  ✔ Uploaded {filename} → s3://{bucket}/{filename}")
 
-if __name__ == "__main__":
-    print("\n⚙  Generating transactions...")
-    txns = generate_transactions(NUM_TRANSACTIONS)
+# ── Step 5: Print report ──────────────────────
+def print_report(results: list[dict]) -> None:
+    bar = "─" * 42
+    print(f"\n  💱  LIVE EXCHANGE RATE REPORT — {results[0]['base_currency']}")
+    print(f"  {bar}")
+    print(f"  {'Currency':<10} {'Rate':>12} {'1000 USD =':>15}")
+    print(f"  {'─'*10} {'─'*12} {'─'*15}")
+    for r in results:
+        print(f"  {r['target_currency']:<10} {r['exchange_rate']:>12.4f} {r['1000_usd_equivalent']:>14.2f}")
+    print()
 
-    print("⚙  Analysing data...")
-    stats = analyze(txns)
+# ── Main ──────────────────────────────────────
+if __name__ == "__main__":
+    print("\n⚙  Fetching live exchange rates...")
+    data = fetch_rates(BASE_CURRENCY)
+
+    print("⚙  Analyzing rates...")
+    results = analyze(data)
 
     print("⚙  Saving CSV...")
-    save_to_csv(txns)
+    save_to_csv(results)
 
     print("⚙  Uploading to S3...")
-    upload_to_s3("transactions.csv")
+    upload_to_s3("exchange_rates.csv")
 
-    print_report(stats)
+    print_report(results)
