@@ -1,14 +1,28 @@
 import csv
 import os
+import json
 import boto3
 import requests
-from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# ── Secrets Manager ───────────────────────────
+def get_secrets() -> dict:
+    secret_name = "cash-flow-analyzer/secrets"
+    region = os.getenv("AWS_REGION", "eu-north-1")
+    client = boto3.client(
+        "secretsmanager",
+        region_name=region,
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    )
+    response = client.get_secret_value(SecretId=secret_name)
+    return json.loads(response["SecretString"])
+
 # ── Configuration ─────────────────────────────
-API_KEY = os.getenv("EXCHANGE_API_KEY")
+secrets = get_secrets()
+API_KEY = secrets["EXCHANGE_API_KEY"]
 BASE_CURRENCY = "USD"
 TRACKED_CURRENCIES = ["EUR", "GBP", "INR", "JPY", "AUD", "CAD", "CHF", "SGD"]
 
