@@ -28,8 +28,6 @@ CloudWatch Logs
 ```bash
 pip install -r requirements.txt
 python cash_flow_analyzer.py
-
-## ▶️ Run With Docker
 docker build -t cash-flow-analyzer .
 
 docker run -e AWS_ACCESS_KEY_ID=xxx \
